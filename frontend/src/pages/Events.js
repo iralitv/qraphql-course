@@ -12,8 +12,9 @@ class EventsPage extends Component {
         creating: false,
         events: [],
         isLoading: false,
-        selectedEvent: null
+        selectedEvent: null,
     };
+    isActive = true;
 
     static contextType = AuthContext;
 
@@ -27,6 +28,10 @@ class EventsPage extends Component {
 
     componentDidMount() {
         this.fetchEvents();
+    }
+
+    componentWillUnmount() {
+        this.isActive = false;
     }
 
     startCreateEventHandler = () => {
@@ -78,38 +83,38 @@ class EventsPage extends Component {
                 Authorization: "Bearer " + token,
             },
         })
-        .then((res) => {
-            if (res.status !== 200 && res.status !== 201) {
-                throw new Error("Failed");
-            }
-            return res.json();
-        })
-        .then((resData) => {
-            this.setState(prevState => { 
-                const updatedEvents = [...prevState.events];
-                updatedEvents.push({
-                    _id: resData.data.createEvent._id,
-                    title: resData.data.createEvent.title,
-                    description: resData.data.createEvent.description,
-                    date: resData.data.createEvent.date,
-                    price: resData.data.createEvent.price,
-                    creator: {
-                        _id: this.context.userId
-                    }
-                }); 
-                return { events: updatedEvents };
+            .then((res) => {
+                if (res.status !== 200 && res.status !== 201) {
+                    throw new Error("Failed");
+                }
+                return res.json();
+            })
+            .then((resData) => {
+                this.setState((prevState) => {
+                    const updatedEvents = [...prevState.events];
+                    updatedEvents.push({
+                        _id: resData.data.createEvent._id,
+                        title: resData.data.createEvent.title,
+                        description: resData.data.createEvent.description,
+                        date: resData.data.createEvent.date,
+                        price: resData.data.createEvent.price,
+                        creator: {
+                            _id: this.context.userId,
+                        },
+                    });
+                    return { events: updatedEvents };
+                });
+            })
+            .catch((err) => {
+                console.log(err);
             });
-        })
-        .catch((err) => {
-            console.log(err);
-        });
     };
 
     modalCancelHandler = () => {
         this.setState({ creating: false, selectedEvent: null });
     };
 
-    fetchEvents() {
+    fetchEvents = () => {
         this.setState({ isLoading: true });
         const requestBody = {
             query: `
@@ -144,27 +149,75 @@ class EventsPage extends Component {
         })
         .then((resData) => {
             const events = resData.data.events;
-            this.setState({ events, isLoading: false });
+            if (this.isActive) {
+                this.setState({ events, isLoading: false });
+            }
         })
         .catch((err) => {
             console.log(err);
-            this.setState({ isLoading: false });
+            if (this.isActive) {
+                this.setState({ isLoading: false });
+            }
+        });
+    }
+
+    showDetailHandler = (eventId) => {
+        this.setState((prevState) => {
+            const selectedEvent = prevState.events.find(
+                (event) => event._id === eventId
+            );
+            return { selectedEvent };
         });
     };
 
-    showDetailHandler = eventId => {
-        this.setState(prevState => { 
-            const selectedEvent = prevState.events.find(event => event._id === eventId);
-            return { selectedEvent };
-        })
-    };
+    bookEventHandler = () => {
+        if (!this.context.token) {
+            this.setState({ selectedEvent: null });
+            return;
+        }
+        const requestBody = {
+            query: `
+                mutation {
+                    bookEvent(eventId: "${this.state.selectedEvent._id}") {
+                        _id
+                        createdAt
+                        updatedAt
+                    }
+                }
+            `,
+        };
 
-    bookEventHandler = () => {};
+        const token = this.context.token;
+
+        fetch("http://localhost:8000/graphql", {
+            method: "POST",
+            body: JSON.stringify(requestBody),
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: "Bearer " + token,
+            },
+        })
+        .then((res) => {
+            if (res.status !== 200 && res.status !== 201) {
+                throw new Error("Failed");
+            }
+            return res.json();
+        })
+        .then((resData) => {
+            console.log(resData);
+            this.setState({ selectedEvent: null });
+        })
+        .catch((err) => {
+            console.log(err);
+        });
+    };
 
     render() {
         return (
             <>
-                {(this.state.creating || this.state.selectedEvent) &&  <Backdrop />}
+                {(this.state.creating || this.state.selectedEvent) && (
+                    <Backdrop />
+                )}
                 {this.state.creating && (
                     <Modal
                         title="Add Event"
@@ -200,9 +253,7 @@ class EventsPage extends Component {
                                 />
                             </div>
                             <div className="form-control">
-                                <label htmlFor="description">
-                                    Description
-                                </label>
+                                <label htmlFor="description">Description</label>
                                 <textarea
                                     id="description"
                                     rows="4"
@@ -212,22 +263,25 @@ class EventsPage extends Component {
                         </form>
                     </Modal>
                 )}
-                {
-                    this.state.selectedEvent && (
-                        <Modal
-                            title={this.state.selectedEvent.title}
-                            canCancel
-                            canConfirm
-                            onCancel={this.modalCancelHandler}
-                            onConfirm={this.bookEventHandler}
-                            confirmTitle="Book Event"
-                        >
-                            <h2>{this.state.selectedEvent.title}</h2>
-                            <h3>${this.state.selectedEvent.price} - {new Date(this.state.selectedEvent.date).toLocaleDateString()}</h3>
-                            <p>{this.state.selectedEvent.description}</p>
-                        </Modal>
-                    )
-                }
+                {this.state.selectedEvent && (
+                    <Modal
+                        title={this.state.selectedEvent.title}
+                        canCancel
+                        canConfirm
+                        onCancel={this.modalCancelHandler}
+                        onConfirm={this.bookEventHandler}
+                        confirmTitle={this.context.token ? "Book Event" : "Confirm"}
+                    >
+                        <h2>{this.state.selectedEvent.title}</h2>
+                        <h3>
+                            ${this.state.selectedEvent.price} -{" "}
+                            {new Date(
+                                this.state.selectedEvent.date
+                            ).toLocaleDateString()}
+                        </h3>
+                        <p>{this.state.selectedEvent.description}</p>
+                    </Modal>
+                )}
                 {this.context.token && (
                     <div className="events-control">
                         <p>Share your own events!</p>
@@ -239,10 +293,15 @@ class EventsPage extends Component {
                         </button>
                     </div>
                 )}
-                { this.state.isLoading 
-                    ? <Spinner/>
-                    : <EventList events={this.state.events} authUserId={this.context.userId} onViewDetail={this.showDetailHandler}/> 
-                }
+                {this.state.isLoading ? (
+                    <Spinner />
+                ) : (
+                    <EventList
+                        events={this.state.events}
+                        authUserId={this.context.userId}
+                        onViewDetail={this.showDetailHandler}
+                    />
+                )}
             </>
         );
     }

@@ -4,7 +4,7 @@ import "./Spinner.css";
 
 const Spinner = () => (
     <div className="spinner__wrapper">
-        <div class="lds-dual-ring"></div>
+        <div className="lds-dual-ring"></div>
     </div>
 );
 
