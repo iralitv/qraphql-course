@@ -1,5 +1,7 @@
 import React, { Component } from 'react';
 import BookingList from '../components/Bookings/BookingList/BookingList';
+import BookingsChart from '../components/Bookings/BookingsChart/BookingsChart';
+import BookingsControls from '../components/Bookings/BookingsControls/BookingsControls';
 import Spinner from '../components/Spinner/Spinner';
 import AuthContext from "../context/auth-context";
 
@@ -7,6 +9,7 @@ class BookingsPage extends Component {
     state = {
         isLoading: false,
         bookings: [],
+        outputType: 'list'
     };
 
     static contextType = AuthContext;
@@ -27,6 +30,7 @@ class BookingsPage extends Component {
                             _id
                             title
                             date
+                            price
                         }
                     }
                 }
@@ -63,13 +67,16 @@ class BookingsPage extends Component {
         this.setState({ isLoading: true });
         const requestBody = {
             query: `
-                mutation {
-                    cancelBooking(bookingId: "${bookingId}") {
+                mutation CancelBooking($id: ID) {
+                    cancelBooking(bookingId: $id) {
                         _id
                         title
                     }
                 }
             `,
+            variables: {
+                id: bookingId
+            }
         };
 
         const token = this.context.token;
@@ -100,13 +107,32 @@ class BookingsPage extends Component {
         });
     };
 
+    changeOutputTypeHandler = outputType => {
+        this.setState({ outputType })
+    };
+
     render() {
+        let content = <Spinner />;
+        if (!this.state.isLoading) {
+            content = (
+                <>
+                    <BookingsControls 
+                        activeOutputType={this.state.outputType}
+                        onChange={this.changeOutputTypeHandler}
+                    />
+                    <div>
+                        {this.state.outputType === 'list' 
+                            ? <BookingList bookings={this.state.bookings} onDelete={this.deleteBookingHandler}/> 
+                            : <BookingsChart bookings={this.state.bookings}/>
+                        }
+                    </div>
+                </>
+            );
+        }
+
         return (
             <> 
-                { this.state.isLoading 
-                    ? <Spinner/>
-                    : <BookingList bookings={this.state.bookings} onDelete={this.deleteBookingHandler} />
-                }
+                { content }
             </>
         );
     }
